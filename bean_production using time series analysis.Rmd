@@ -1,0 +1,136 @@
+---
+title: "MODELLING OF BEANS PRODUCTION IN KENYA USING TIME SERIES"
+author: "Eddy Okuku"
+date: "2025-07-02"
+output: html_document
+---
+
+## Setting working directory
+```{r}
+setwd("C:/Users/Public/2015_B")
+```
+
+## Loading libraries
+```{r}
+library(tidyverse)
+library(readxl)
+
+```
+
+## Loading dataset
+```{r}
+bp <- read_excel("Beans Production data.xlsx")
+head(bp)
+```
+
+## Cleaning the data to remain with year and value column
+```{r}
+clean_bp <- bp %>% 
+  select(`Year Code`, Value) %>% 
+  rename(Production = Value, Year = `Year Code`)
+
+view(clean_bp)
+```
+
+## Structure of the data
+```{r}
+str(clean_bp)
+```
+## Changing Year from character to numeric
+```{r}
+clean_bp$Year <- as.numeric(clean_bp$Year)
+```
+
+## Checking for missing values
+```{r}
+colSums(is.na(clean_bp))
+```
+
+## Visualizing the time series
+```{r}
+#plotting production over the years
+ggplot(clean_bp, aes(x= Year, y= Production)) +
+  geom_line(color = "darkgreen", size = 1) +
+  geom_point(color = "black") +
+  labs(title = "Beans Production in Kenya over Time",
+       x = "Year",
+       y = "Production (Kg/ha)") +
+  theme_minimal()
+```
+
+## Checking if the data is stationary(ADF)
+```{r}
+library(tseries)
+library(pander)
+
+#ADF test on production values
+pander(adf.test(clean_bp$Production))
+```
+## Making the Series Stationary (Differencing)
+```{r}
+#Creating a new differencing column
+clean_bp$diff_production <- c(NA, diff(clean_bp$Production))
+
+#Plotting the differenced series
+ggplot(clean_bp, aes(x= Year, y= diff_production)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "First Differenced Beans Production",
+       x = "Year",
+       y = " Differenced Production") +
+  theme_minimal()
+```
+
+##Testing for Stationarity again
+```{r}
+#Removing the first missing value
+diff_values <- na.omit(clean_bp$diff_production)
+pander(adf.test(diff_values))
+```
+# Fitting ARIMA Model
+## Visual Methods (ACF $ PACF)
+```{r}
+library(forecast)
+
+acf(diff_values, main= "ACF of differenced Bean Production")
+pacf(diff_values, main= "PACF of differenced Bean Production")
+```
+
+## Auto ARIMA (Letting R choose the best model)
+```{r}
+auto_model <- auto.arima(clean_bp$Production, d = 1, trace = TRUE)
+pander(summary(auto_model))
+
+```
+
+##Residual diagnostic
+### plot residual
+```{r}
+tsdisplay(residuals(auto_model), main = "Residual of ARIMA(0,1,1")
+```
+
+
+## Checking normality visually
+```{r}
+hist(residuals(auto_model), main = "Histogram of Residuals", 
+     xlab = "Residual")
+```
+
+
+## Performing Ljung-Box test for autocorrelation
+```{r}
+Box.test(residuals(auto_model), lag = 10, type = "Ljung-Box")
+```
+
+## Checking normality with Shapiro-Wilk test
+```{r}
+shapiro.test(residuals(auto_model))
+```
+
+## Forecasting with ARIMA(0,1,1)
+```{r}
+forecast_values <- forecast(auto_model, h=12)
+
+#Plotting the forecast
+plot(forecast_values)
+```
+
